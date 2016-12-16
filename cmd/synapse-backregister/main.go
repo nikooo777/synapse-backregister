@@ -59,11 +59,6 @@ func main() {
 		log.Fatal("must specify SYNAPSE_SERVER environment variable")
 	}
 
-	admin := false
-	if os.Getenv("REGISTER_ADMINS") != "" {
-		admin = true
-	}
-
 	http.ListenAndServe(":8000", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == "POST" {
 			uname := req.FormValue("Username")
@@ -84,25 +79,20 @@ func main() {
 			hm := hmac.New(sha1.New, []byte(sharedSecret))
 
 			hm.Write([]byte(uname))
-			hm.Write([]byte{0})
-			hm.Write([]byte(pass))
-			hm.Write([]byte{0})
-			if admin {
-				hm.Write([]byte("admin"))
-			} else {
-				hm.Write([]byte("notadmin"))
-			}
 			hexDigest := hex.EncodeToString(hm.Sum(nil))
 
-			synapseReqData := map[string]interface{}{
-				"user":     uname,
-				"password": pass,
-				"mac":      hexDigest,
-				"type":     "org.matrix.login.shared_secret",
-				"admin":    admin,
-			}
+            synapseReqData := map[string]interface{}{
+                "username":     uname,
+                "password": pass,
+                "mac":      hexDigest,
+                "auth": map[string]interface{}{
+                    "type":     "org.matrix.login.shared_secret",
+                },
+            }
+			//log.Printf("requestData: %v", synapseReqData)
 
 			reqJson, err := json.Marshal(synapseReqData)
+			//log.Printf("reqJson: %v", string(reqJson))
 			if err != nil {
 				w.WriteHeader(400)
 				logIfErr(htmlTemplate.Execute(w, map[string]string{"Notice": "OH NO INTERNAL JSON FAILURE!"}))
@@ -110,7 +100,8 @@ func main() {
 			}
 
 			serverLocation := strings.TrimRight(matrixServer, "/")
-			regResp, err := http.Post(fmt.Sprintf("%s/_matrix/client/api/v1/register", serverLocation), "application/json", bytes.NewReader(reqJson))
+			regResp, err := http.Post(fmt.Sprintf("%s/_matrix/client/r0/register", serverLocation), "application/json", bytes.NewReader(reqJson))
+			//log.Printf("regResp: %v", regResp)
 			if err != nil {
 				log.Printf("error: %v", err)
 				w.WriteHeader(500)
